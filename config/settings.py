@@ -23,6 +23,7 @@ def require(key: str) -> str:
 
 
 GITHUB_TOKEN = require("GITHUB_TOKEN")
+GITHUB_USERNAME = require("GITHUB_USERNAME")
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
 ANTHROPIC_API_KEY = (
@@ -39,3 +40,7 @@ GITHUB_HEADERS = {
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
 }
+
+# ── Memory (Module 7) ─────────────────────────────────────────────────────────
+# Local Chroma vector DB for agent memory / RAG
+MEMORY_DIR = os.path.join(os.path.dirname(__file__), "..", ".nimbledev_memory")

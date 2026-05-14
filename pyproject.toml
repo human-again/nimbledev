@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nimbledev"
 version = "0.1.0"
-description = "Agentic pull request review assistant"
+description = "Multi-agent open source contributor"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,7 +14,11 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "requests>=2.34.1",
     "rich>=15.0.0",
+    "structlog>=24.1.0",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=3.0.0",
+    "mcp>=1.0.0",
 ]
 
 [tool.setuptools]
-packages = ["agents", "config", "tools"]
+packages = ["agents", "config", "memory", "mcp_server", "observability", "tools"]

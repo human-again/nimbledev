@@ -41,10 +41,11 @@ cat <<'EOF'
 Setup complete.
 
 Next steps:
-  1. Open .env and fill in ANTHROPIC_API_KEY and GITHUB_TOKEN
-     Optional: adjust LLM_PROVIDER and MODEL
+  1. Open .env and fill in ANTHROPIC_API_KEY, GITHUB_TOKEN, and GITHUB_USERNAME
   2. Run one of these commands:
 
      .venv/bin/python main.py --help
      .venv/bin/python main.py review-pr https://github.com/psf/requests/pull/6745
+     .venv/bin/python main.py analyze https://github.com/psf/requests/issues/6730
+     .venv/bin/python main.py fix https://github.com/psf/requests/issues/6730
 EOF

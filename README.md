@@ -1,11 +1,10 @@
-# NimbleDev PR Review Assistant
+# NimbleDev — Multi-Agent SDLC Assistant
 
-NimbleDev is a small agentic AI tool for the pull request review phase of the SDLC. Given a GitHub PR URL, it fetches PR metadata, changed files, diffs, and selected context files, then returns a structured review with a verdict, actionable comments, positive highlights, and missing-test suggestions.
-
+A multi-agent AI system that improves two phases of the software development lifecycle: **PR code review** and **open source issue fixing**. Built with Python and the Anthropic SDK (Claude claude-sonnet-4-6).
 
 ## Quickstart
 
-Requirements: Python 3.10, an Anthropic API key, and a GitHub token with repo read access. `setup.sh` uses `pip` inside `.venv`; `uv.lock` is included for developers who prefer `uv`-based reproducible installs.
+This repo is meant to run directly from the checkout. If you already have Python 3.10 installed:
 
 ```bash
 git clone <repo>
@@ -13,83 +12,152 @@ cd nimbledev
 ./setup.sh
 ```
 
-If `python3.10` is not installed, `setup.sh` stops with install guidance. After setup, fill in `.env`:
+If `python3.10` is missing, `setup.sh` stops and tells you how to install it.
+
+After setup:
 
 ```bash
-LLM_PROVIDER=anthropic
-MODEL=claude-sonnet-4-6
-ANTHROPIC_API_KEY=...
-GITHUB_TOKEN=...
-```
+# fill in ANTHROPIC_API_KEY, GITHUB_TOKEN, GITHUB_USERNAME
+open .env   # or edit it in your editor
 
-Run a review:
-
-```bash
+# inspect available commands
 .venv/bin/python main.py --help
+
+# PR review
 .venv/bin/python main.py review-pr https://github.com/psf/requests/pull/6745
+
+# issue analysis
+.venv/bin/python main.py analyze https://github.com/psf/requests/issues/6730
+
+# full issue-to-PR pipeline
+.venv/bin/python main.py fix https://github.com/psf/requests/issues/6730
 ```
 
-Run tests:
+Your GitHub token needs the `repo` scope for reading public repos.
+
+---
+
+## Problem chosen
+
+Two real SDLC pain points, one shared agent platform:
+
+**PR Review** — Code review is slow and inconsistent. Reviewers miss edge cases, forget to check tests, and apply different standards across PRs. An agent-based reviewer delivers structured, repeatable feedback in seconds — covering bugs, security issues, style, and missing test coverage in every review.
+
+**Issue Fix** — Triaging and fixing open source issues requires understanding an unfamiliar codebase quickly. Agents that read issues, map the relevant code, and plan fixes accelerate contributor ramp-up and reduce the time from "bug reported" to "PR opened."
+
+---
+
+## Agent design and workflow
+
+NimbleDev runs two independent pipelines sharing a common tool layer and schema library.
+
+### Pipeline A — PR Review
+
+```
+GitHub PR URL
+     │
+     ▼
+┌─────────────────┐
+│  Diff Parser    │  Fetches PR metadata, file list, and diff.
+│                 │  Produces a structured DiffSummary: what changed,
+│                 │  which areas need scrutiny, which context files to read.
+└────────┬────────┘
+         │ DiffSummary (Pydantic)
+         ▼
+┌─────────────────┐
+│  Review Critic  │  Reads the diff and context files. Evaluates the changes.
+│                 │  Produces a structured PRReview: verdict, per-comment
+│                 │  severity/category/line-ref, highlights, missing tests.
+└────────┬────────┘
+         │ PRReview (Pydantic)
+         ▼
+  Formatted review report (stdout)
+```
+
+### Pipeline B — Issue Fix
+
+```
+GitHub Issue URL
+     │
+     ▼
+┌─────────────────┐
+│  Issue Reader   │  Reads the issue + comments. Explores repo structure.
+│                 │  Produces a plain-text analysis: bug summary, likely
+│                 │  location, fix hypothesis, files to study.
+└────────┬────────┘
+         │ text analysis
+         ▼
+┌─────────────────┐
+│  Code Analyst   │  Reads full source files, finds exact lines.
+│                 │  Produces a structured CodeAnalysis: root cause,
+│                 │  files_to_change with line refs, fix approach, confidence.
+└────────┬────────┘
+         │ CodeAnalysis (Pydantic)
+         ▼
+  Fix Writer, Reviewer, PR Agent  ← roadmap (Modules 3-5)
+```
+
+### Key design decisions
+
+**Specialised agents over one large agent.** Each agent has a single, well-defined job. The Diff Parser comprehends; the Review Critic evaluates. Mixing these in one agent produces muddy reasoning and harder-to-debug output.
+
+**Pydantic schemas as agent contracts.** Every agent-to-agent handoff uses a validated Pydantic model. If an agent produces `severity: "very critical"` instead of `"critical"`, a `ValidationError` is raised immediately rather than flowing silently downstream.
+
+**Tool subsets per pipeline.** Agents only see the tools relevant to their job (`ISSUE_FIX_TOOLS` vs `PR_REVIEW_TOOLS`). This reduces noise in tool selection and keeps system prompts focused.
+
+**Agentic loop with safety cap.** Every agent runs a `while` loop — ask Claude, execute tools, feed results back — capped at a maximum iteration count to prevent runaway agents.
+
+---
+
+## Setup
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+git clone <repo>
+cd nimbledev
+./setup.sh
 ```
 
-## Problem Chosen
-
-PR review is a high-leverage but inconsistent SDLC step. Reviewers often lack time to inspect edge cases, test coverage, security concerns, and design impact with the same depth on every change. NimbleDev applies a repeatable agent workflow to produce a first-pass review that helps human reviewers focus faster.
-
-## Agent Design
-
-The workflow uses two specialized agents with a small shared GitHub tool layer, a local model-provider adapter, and Pydantic schemas as contracts. Each agent receives only the tools it needs: the Diff Parser can fetch PR metadata, changed files, and the diff; the Review Critic can fetch the diff and requested context files.
-
-```text
-GitHub PR URL
-  -> Diff Parser
-     Fetches metadata, changed files, diff, and useful context.
-     Produces DiffSummary.
-  -> Review Critic
-     Evaluates bugs, security, performance, design, style, and tests.
-     Produces PRReview.
-  -> Formatted CLI report
+```bash
+# Then edit .env and run:
+.venv/bin/python main.py review-pr https://github.com/psf/requests/pull/6745
+.venv/bin/python main.py analyze https://github.com/psf/requests/issues/6730
 ```
 
-The split keeps comprehension separate from judgment. The Diff Parser answers "what changed and where should we look?" The Review Critic answers "is this safe, clear, tested, and ready to merge?" Each handoff is validated with Pydantic so malformed agent output gets one validation-feedback retry before failing explicitly. That corrective retry is JSON-only: tools are disabled so the model cannot drift back into more context fetching while repairing its structured output.
+---
 
-The final review schema also enforces the severity/verdict invariant in code: any `critical` or `major` comment requires `overall_verdict` to be `request_changes`. This keeps the local schema contract aligned with the prompt instructions.
+## Assumptions and trade-offs
 
-The two agents do not have equal autonomy. The Diff Parser is intentionally close to a constrained tool workflow: fetch metadata, files, and diff, then summarize. The Critic has the more agentic part of the system because it decides which listed context files to read, when it has enough evidence, and how to weigh findings into a verdict.
+**No UI or auth layer.** CLI only — scope is the agent logic, not the interface.
 
-## Model Provider Boundary
+**GitHub API as the tool layer.** All codebase access goes through the GitHub REST API. No local git clone needed, but rate limits apply and large files get truncated at 8,000 characters.
 
-The current implementation ships only the Anthropic provider, but the agents do not import Anthropic directly. They call a local `LLMClient` adapter created from `LLM_PROVIDER`, so provider-specific SDK details are isolated in one place. `MODEL` is the preferred model-name setting; `ANTHROPIC_MODEL` remains supported for backwards compatibility.
+**JSON-in-prompt for structured output.** The system prompt embeds the exact JSON schema and instructs the agent to produce only that. A more robust approach is Anthropic's native forced tool-use output — saved for a later iteration.
 
-This reduces structural vendor lock-in, but does not eliminate provider lock-in completely. A second provider would still need its own adapter plus contract tests for tool-use blocks, stop reasons, token usage, JSON reliability, and prompt behavior.
+**Sequential pipeline, no parallelism.** Agents run serially. For production, context-file reads could fan out in parallel, cutting latency significantly.
 
-## Assumptions and Trade-offs
+**No retry logic on parse failure.** If an agent produces malformed JSON, the pipeline raises immediately. A production system would re-prompt the agent with the validation error and ask it to self-correct.
 
-This is intentionally CLI-only: no UI, authentication flow, database, or deployment. GitHub access goes through the REST API rather than a local clone, which keeps setup simple but means API rate limits and truncated large files matter. Diff and file-content tools return structured truncation metadata (`content`, `truncated`, `total_chars`) so the agents can account for partial context. Agent output is requested as JSON, validated locally, and retried once with validation feedback.
+---
 
-## What I Would Improve
+## What I would improve with more time
 
-With more time, I would add a fixture-based eval suite for review quality: canned PR diffs, mocked tool responses, and expected behavioral assertions such as catching seeded bugs, choosing the right verdict, avoiding unsupported findings, and noting truncation limits. I would score schema validity, issue detection, severity/verdict correctness, tool-use discipline, and false-positive rate rather than exact review wording. I would also add parallel context retrieval, richer trace logging with cost estimates, and repository-specific review memory so future reviews can reuse past project conventions.
+- Pydantic cross-field validators (e.g. enforce `overall_verdict = "request_changes"` when any `critical` comment exists)
+- Parallel tool calls in the Review Critic to halve latency on context file reads
+- Retry loop on parse failure — re-prompt with the validation error rather than crashing
+- Complete the issue-fix pipeline end-to-end with Fix Writer, Reviewer, and PR Agent (Modules 3-5)
+- Structured logging with trace IDs and per-agent token usage for observability
+- RAG layer — embed past reviews into a vector store so agents can reference prior decisions
 
-## Contributing
+---
 
-Contributions are welcome, including bug fixes, test improvements, eval additions, and provider-adapter follow-ups.
+## How I used AI tools
 
-Before opening a PR:
-1. Read [CONTRIBUTING.md](./CONTRIBUTING.md).
-2. Run `.venv/bin/python -m unittest discover -s tests -v`.
-3. Keep changes focused and include tests for behavior changes.
+NimbleDev was built iteratively with Claude (Anthropic) as a coding assistant throughout.
 
-## PRs Welcome
+**Architecture first** — used Claude to map the two-pipeline design and identify the right agent boundaries before writing any code. Key design question: where does comprehension end and evaluation begin?
 
-PRs are actively welcome. If you want to contribute but are unsure where to start, open an issue with:
-1. The problem you want to solve.
-2. The proposed approach.
-3. Any tradeoffs or open questions.
+**Schema-driven development** — wrote `schemas.py` first (Pydantic models for all handoffs), then built agents around those contracts. Claude helped identify which fields were genuinely needed vs. speculative.
 
-## How I Used AI Tools
+**System prompt iteration** — each agent's system prompt went through multiple drafts. Claude helped identify ambiguities (e.g. the severity guide needed explicit definitions of "major" vs "minor" or agents were inconsistent).
 
-I used AI coding assistance to iterate on the agent boundaries, schemas, prompts, setup flow, and test strategy. The most useful prompts were architectural: deciding where diff comprehension should end, what the critic should own, and which fields were necessary in each schema. I then used the assistant to stress-test scope and keep the final branch focused on one shippable SDLC use case.
+**Honest about the meta** — NimbleDev is a PR reviewer built with the help of an AI assistant. The AI was most valuable for schema design, prompt drafting, and edge case identification. The architectural decisions — agent boundaries, pipeline structure, Pydantic over dataclasses — were made by the developer and stress-tested in conversation.
