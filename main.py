@@ -90,21 +90,8 @@ def cmd_analyze(url: str) -> None:
 
 def cmd_fix(url: str) -> None:
     """
-    Modules 1-5 — Full issue fix pipeline with feedback loop:
-      Issue Reader → Code Analyst → Fix Writer → Reviewer (loop) → PR Agent
-
-    TEACHING NOTE — The full pipeline:
-      This command runs the complete NimbleDev workflow:
-
-      1. Issue Reader:   understand what the bug is (natural language)
-      2. Code Analyst:   find the exact code that needs to change
-      3. Fix Writer:     write the corrected code (full file content)
-      4. Reviewer:       check if the fix is correct (critic/generator loop)
-         ↑_______________|  (up to 3 attempts if needs_revision)
-      5. PR Agent:       fork → branch → push → open PR
-
-      Observability (Module 6) wraps the whole run with token tracking.
-      Memory (Module 7) retrieves past similar analyses as context.
+    Run the full issue-fix pipeline:
+    Issue Reader → Code Analyst → Fix Writer → Reviewer loop → PR Agent.
     """
     owner, repo, issue_number = parse_issue_url(url)
 
@@ -250,20 +237,7 @@ def cmd_review_pr(url: str) -> None:
 
 def cmd_serve_mcp() -> None:
     """
-    Module 8 — Start the NimbleDev GitHub MCP server.
-
-    This exposes all GitHub tools as a proper MCP server that any
-    MCP-compatible agent or client can connect to.
-
-    TEACHING NOTE — MCP server as a standalone service:
-      Running '.venv/bin/python main.py serve-mcp' starts an stdio MCP server.
-      The MCP client (Claude Desktop, MCP Inspector, another agent)
-      communicates via stdin/stdout using the MCP protocol.
-
-      This means NimbleDev's GitHub tools become reusable by:
-        - Claude Desktop (add to claude_desktop_config.json)
-        - MCP Inspector (npx @modelcontextprotocol/inspector ...)
-        - Any future agent you build with any framework
+    Start the GitHub MCP server over stdio.
     """
     try:
         from mcp_server.github_mcp import mcp

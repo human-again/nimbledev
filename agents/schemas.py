@@ -1,43 +1,12 @@
 """
 agents/schemas.py
 -----------------
-Shared Pydantic schemas for all agent-to-agent handoffs.
-
-Two pipelines share this file:
-
-  Pipeline A — Issue Fix (Modules 1-5):
-    IssueAnalysis  (Issue Reader → Code Analyst)
-    CodeAnalysis   (Code Analyst → Fix Writer)
-
-  Pipeline B — PR Review (assignment):
-    DiffSummary    (Diff Parser → Review Critic)
-    PRReview       (Review Critic → output / human)
-
-TEACHING NOTE — Why Pydantic over dataclasses:
-  Pydantic validates data at parse time, not silently.
-
-  With dataclasses:
-    FileChange(change_type="very modify")  # silently accepted, bug flows downstream
-
-  With Pydantic:
-    FileChange(change_type="very modify")  # ValidationError raised immediately:
-    # change_type: Input should be 'modify', 'create' or 'delete'
-
-  In agent pipelines this matters a lot. The LLM will occasionally drift from
-  your schema. You want that caught immediately with a clear error, not 3 agents
-  later with a confusing KeyError. Pydantic gives you that for free.
-
-  Other benefits we get here:
-  - model.model_dump_json()  — built-in JSON serialisation
-  - model.model_validate_json(raw)  — parse + validate in one call
-  - Literal types  — constrain to exact allowed values
-  - Field(description=...)  — documents fields, also useful in prompts
+Shared Pydantic schemas for agent handoffs across both pipelines.
 """
 
 from __future__ import annotations
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
-import json
 
 
 # ── Pipeline A: Issue Fix ──────────────────────────────────────────────────────
@@ -269,14 +238,6 @@ class Objection(BaseModel):
 class ReviewDecision(BaseModel):
     """
     Structured handoff: Reviewer → Fix Writer (if needs_revision) or done.
-
-    TEACHING NOTE — The critic/generator pattern:
-      Reviewer sees the full CodeAnalysis + ProposedFix and asks:
-        1. Does this fix address the actual root cause?
-        2. Does it introduce any new bugs?
-        3. Does it match the project's code style?
-        4. Are the test suggestions adequate?
-      If any answer is "no", it returns specific Objections for the Fix Writer.
     """
     verdict: Literal["approved", "needs_revision"]
     overall_comment: str = Field(description="2-3 sentence assessment of the fix")

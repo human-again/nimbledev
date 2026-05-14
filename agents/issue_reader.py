@@ -1,25 +1,7 @@
 """
 agents/issue_reader.py
 ----------------------
-Module 1: The Issue Reader Agent
-
-This is your first agent. It takes a GitHub issue URL and produces a structured
-analysis: what the bug is, where in the codebase to look, and what a fix might
-involve.
-
-TEACHING NOTE — The Agentic Loop:
-  A "loop" is what makes an LLM an agent rather than just a chatbot.
-  The loop works like this:
-
-    1. We send the LLM a message with a list of available tools
-    2. The LLM responds with either:
-       a) A text answer  → we're done, return it
-       b) A tool call    → we run the tool, feed the result back, go to step 2
-    3. Repeat until the LLM gives a text answer
-
-  This loop is the heart of every agent you'll ever build. The agents in
-  later modules (Code Analyst, Fix Writer, Reviewer) all use this same pattern —
-  they just have different system prompts and different tools.
+Reads a GitHub issue and produces structured analysis for the next agent.
 """
 
 import anthropic
@@ -67,7 +49,7 @@ def run(owner: str, repo: str, issue_number: int) -> str:
     """
     client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    # The initial message that kicks off the agent
+    # Seed the agent with the issue and repository context.
     messages = [
         {
             "role": "user",
@@ -86,15 +68,13 @@ def run(owner: str, repo: str, issue_number: int) -> str:
         border_style="blue"
     ))
 
-    # ── The Agentic Loop ──────────────────────────────────────────────────────
     iteration = 0
-    max_iterations = 10  # Safety cap — prevents runaway agents
+    max_iterations = 10  # Safety cap
 
     while iteration < max_iterations:
         iteration += 1
         console.print(f"\n[dim]── Turn {iteration} ──[/dim]")
 
-        # Ask Claude what to do next
         response = client.messages.create(
             model=MODEL,
             max_tokens=4096,
@@ -103,12 +83,9 @@ def run(owner: str, repo: str, issue_number: int) -> str:
             messages=messages,
         )
 
-        # Add Claude's response to the conversation history
         messages.append({"role": "assistant", "content": response.content})
 
-        # Check the stop reason to know what Claude wants
         if response.stop_reason == "end_turn":
-            # Claude is done — extract and return the text answer
             for block in response.content:
                 if hasattr(block, "text"):
                     console.print(Panel(block.text, title="[green]Analysis Complete[/green]", border_style="green"))
@@ -116,7 +93,6 @@ def run(owner: str, repo: str, issue_number: int) -> str:
             return "(Agent finished but produced no text output)"
 
         elif response.stop_reason == "tool_use":
-            # Claude wants to call one or more tools — run them all
             tool_results = []
 
             for block in response.content:

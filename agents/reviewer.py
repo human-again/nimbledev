@@ -1,67 +1,7 @@
 """
 agents/reviewer.py
 ------------------
-Module 4: The Reviewer Agent
-
-Evaluates a ProposedFix against the original CodeAnalysis and returns a
-structured ReviewDecision — either "approved" or "needs_revision" with
-specific objections for the Fix Writer to address.
-
-TEACHING NOTE — The critic/generator pattern:
-
-  This is one of the most powerful patterns in multi-agent AI:
-
-    Generator (Fix Writer) → Critic (Reviewer) → Generator (Fix Writer) → ...
-
-  The key insight: two specialised agents working together produce better
-  output than one agent trying to both generate and review its own work.
-
-  Why? Because the *generation* and *evaluation* tasks require different
-  mental modes:
-    - Generation: be creative, write complete code, commit to a solution
-    - Evaluation: be sceptical, look for edge cases, check assumptions
-
-  Asking a single agent to do both in sequence leads it to rationalise its
-  own choices ("I wrote this, so it must be right"). A separate Reviewer
-  agent starts fresh with a critical eye.
-
-TEACHING NOTE — Cyclic vs linear pipelines:
-
-  Most tutorials show LINEAR pipelines:  A → B → C → done
-
-  Real-world systems often need CYCLIC pipelines:  A → B → A → B → done
-
-  The feedback loop here is:
-    Fix Writer → Reviewer → (if needs_revision) → Fix Writer → Reviewer → done
-
-  Three design decisions matter for cyclic pipelines:
-
-  1. STOPPING CONDITIONS: What makes the loop terminate?
-     - Happy path: Reviewer says "approved"
-     - Guard: max retries (we use 3) to prevent infinite loops
-     - Always prefer the most recent approved fix
-
-  2. FEEDBACK FORMAT: The Reviewer's objections must be specific enough for
-     the Fix Writer to act on. Vague feedback ("this looks wrong") is useless.
-     Each Objection has: file_path + issue + suggestion.
-
-  3. CONTEXT CARRY-OVER: The Fix Writer on retry receives BOTH the original
-     CodeAnalysis AND the Reviewer's objections. It can see what it tried
-     before and what was rejected, allowing it to course-correct rather than
-     repeat the same mistake.
-
-TEACHING NOTE — Why the Reviewer does NOT use tools:
-
-  The Reviewer only reads what it was given (CodeAnalysis + ProposedFix).
-  It doesn't call get_file_content or browse the repo.
-
-  This is intentional: if the Fix Writer did its job (read before write),
-  the Reviewer already has everything it needs in the handoff objects.
-  Adding tools would bloat cost and latency for no gain.
-
-  Rule of thumb: only give an agent tools when the task requires information
-  it cannot receive through its inputs. The Reviewer's task is purely
-  evaluative — it works with what's handed to it.
+Evaluates a proposed fix and returns approval or revision requests.
 """
 
 import json

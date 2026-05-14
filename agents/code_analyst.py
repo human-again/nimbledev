@@ -1,40 +1,7 @@
 """
 agents/code_analyst.py
 ----------------------
-Module 2: The Code Analyst Agent
-
-Receives the Issue Reader's analysis and goes deeper — reads full files,
-pinpoints exact lines, and produces a structured CodeAnalysis spec that
-the Fix Writer can act on directly.
-
-TEACHING NOTE — Agent-to-agent handoffs:
-  This is the first time one agent's output becomes another's input.
-  The handoff has three parts:
-
-  1. OUTPUT CONTRACT: The Code Analyst must produce a CodeAnalysis object
-     (defined in schemas.py). We enforce this by embedding the JSON schema
-     in the system prompt and parsing the response. If parsing fails,
-     we know the agent went off-script.
-
-  2. CONTEXT INJECTION: The Issue Reader's analysis is injected into the
-     Code Analyst's first user message. The analyst doesn't re-read the
-     issue from GitHub — it trusts the prior agent's work and goes deeper.
-     This is the core pattern for chaining agents efficiently.
-
-  3. SPECIALISATION: Each agent has a narrow, well-defined job. The Code
-     Analyst doesn't write code (that's the Fix Writer's job). It only
-     diagnoses. Narrow jobs mean better prompts, clearer outputs, and
-     easier debugging when something goes wrong.
-
-TEACHING NOTE — Structured output via JSON in system prompt:
-  We ask Claude to produce a specific JSON shape by:
-    a) Showing the exact schema in the system prompt
-    b) Asking for ONLY the JSON block, no prose around it
-    c) Parsing and validating it in Python after
-
-  A more robust approach (which we'll use in later modules) is Anthropic's
-  native structured output via `response_format`. For now, JSON-in-prompt
-  keeps the concept visible and easy to understand.
+Deepens issue analysis by reading source files and producing a fix plan.
 """
 
 import json
@@ -49,9 +16,7 @@ from agents.schemas import CodeAnalysis, FileChange
 
 console = Console()
 
-# The full set of tools — Code Analyst gets everything Issue Reader had,
-# plus get_file_at_lines and get_recent_commits for surgical inspection.
-ALL_TOOL_SCHEMAS = TOOL_SCHEMAS  # already includes all 6 tools
+ALL_TOOL_SCHEMAS = TOOL_SCHEMAS
 
 SYSTEM_PROMPT = """You are the Code Analyst agent for NimbleDev, a multi-agent system that fixes open source bugs.
 

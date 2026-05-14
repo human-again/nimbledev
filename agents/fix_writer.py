@@ -1,43 +1,7 @@
 """
 agents/fix_writer.py
 --------------------
-Module 3: The Fix Writer Agent
-
-Receives CodeAnalysis from the Code Analyst and writes the actual corrected
-code — full file content, not patches — for every file that needs to change.
-
-TEACHING NOTE — Code generation agents:
-
-  The Fix Writer is a *code generation* agent: its output is not prose or
-  a structured analysis, but working source code. A few design choices matter:
-
-  1. WHY FULL FILE, NOT PATCH FORMAT?
-     Patches (unified diffs) are brittle. If the LLM is off by one line,
-     the patch fails to apply. Full file content is unambiguous — you just
-     overwrite the file. It also means the agent can see the surrounding
-     context while writing, reducing the chance of subtle breakage.
-     Trade-off: more tokens. Solution: only read files listed in files_to_change.
-
-  2. CONTEXT WINDOW MANAGEMENT
-     The Fix Writer reads only the files it needs to change (from CodeAnalysis).
-     It does NOT re-read the whole repo. This keeps the context focused and
-     avoids hitting token limits. The Code Analyst already did the exploration;
-     the Fix Writer builds on that work.
-
-  3. THE "MINIMAL CHANGE" PRINCIPLE
-     Agents (like junior developers) tend to over-engineer. The system prompt
-     explicitly instructs: change only what's necessary, preserve existing
-     style, don't refactor unrelated code. This produces cleaner PRs and
-     makes review easier.
-
-  4. READ BEFORE WRITE
-     The agent is required to call get_file_content before writing any fix.
-     This prevents it from "hallucinating" the current file content and
-     ensures fixed_content is a valid modification of the actual file.
-
-  5. STYLE MATCHING
-     The agent fetches CONTRIBUTING.md first so it knows the project's
-     conventions (line length, docstrings, test framework, etc.).
+Generates full-file fixes from the analyzed issue context.
 """
 
 import json
