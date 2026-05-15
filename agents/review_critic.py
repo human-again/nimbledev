@@ -4,13 +4,13 @@ agents/review_critic.py
 Evaluates a pull request from a structured diff summary and returns a review.
 """
 
-import re
-import anthropic
 from rich.console import Console
 from rich.panel import Panel
 
-from config.settings import ANTHROPIC_API_KEY, MODEL
-from tools.github import PR_REVIEW_TOOLS, dispatch
+from config.settings import MODEL
+from agents.llm import create_llm_client
+from tools.github import CRITIC_TOOLS, dispatch
+from agents.json_utils import extract_json_object
 from agents.schemas import DiffSummary, PRReview
 
 console = Console()
@@ -60,6 +60,7 @@ SEVERITY GUIDE:
 - nit: style or personal preference
 
 RULES:
+- get_pr_diff and get_file_content return JSON with content, truncated, and total_chars. If truncated is true, account for that limitation in your summary or missing_tests rather than over-claiming certainty.
 - overall_verdict must be "request_changes" if any critical or major comments exist
 - overall_verdict must be "approve" only if the PR is ready to merge as-is
 - Always include at least one positive highlight — good review culture
@@ -69,18 +70,12 @@ RULES:
 
 
 def _extract_json(text: str) -> str:
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if fence:
-        return fence.group(1)
-    brace = re.search(r"\{.*\}", text, re.DOTALL)
-    if brace:
-        return brace.group(0)
-    raise ValueError("No JSON object found in agent response")
+    return extract_json_object(text)
 
 
 def run(owner: str, repo: str, pr_number: int, diff_summary: DiffSummary) -> PRReview:
     """Run the Review Critic agent and return the final structured review."""
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = create_llm_client()
 
     messages = [
         {
@@ -105,18 +100,22 @@ def run(owner: str, repo: str, pr_number: int, diff_summary: DiffSummary) -> PRR
 
     iteration = 0
     max_iterations = 12
+    parse_failures = 0
+    max_parse_retries = 1
+    correcting_output = False
 
     while iteration < max_iterations:
         iteration += 1
         console.print(f"\n[dim]── Turn {iteration} ──[/dim]")
 
-        response = client.messages.create(
+        response = client.create_message(
             model=MODEL,
             max_tokens=4096,
             system=SYSTEM_PROMPT,
-            tools=PR_REVIEW_TOOLS,
+            tools=[] if correcting_output else CRITIC_TOOLS,
             messages=messages,
         )
+        _print_usage(response)
 
         messages.append({"role": "assistant", "content": response.content})
 
@@ -138,6 +137,18 @@ def run(owner: str, repo: str, pr_number: int, diff_summary: DiffSummary) -> PRR
                 return review
             except Exception as e:
                 console.print(f"[red]Parse failed: {e}[/red]")
+                if parse_failures < max_parse_retries:
+                    parse_failures += 1
+                    correcting_output = True
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            "Your previous response did not validate as a PRReview. "
+                            f"Validation error: {e}\n\n"
+                            "Return only a corrected JSON object matching the requested schema."
+                        ),
+                    })
+                    continue
                 raise RuntimeError(f"Review Critic produced invalid output: {e}") from e
 
         elif response.stop_reason == "tool_use":
@@ -171,3 +182,13 @@ def _fmt_args(args: dict) -> str:
             v_str = v_str[:40] + "..."
         parts.append(f"{k}={repr(v_str)}")
     return ", ".join(parts)
+
+
+def _print_usage(response) -> None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    input_tokens = getattr(usage, "input_tokens", None)
+    output_tokens = getattr(usage, "output_tokens", None)
+    if input_tokens is not None and output_tokens is not None:
+        console.print(f"[dim]Tokens: in={input_tokens}, out={output_tokens}[/dim]")

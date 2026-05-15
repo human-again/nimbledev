@@ -42,6 +42,7 @@ Setup complete.
 
 Next steps:
   1. Open .env and fill in ANTHROPIC_API_KEY and GITHUB_TOKEN
+     Optional: adjust LLM_PROVIDER and MODEL
   2. Run one of these commands:
 
      .venv/bin/python main.py --help

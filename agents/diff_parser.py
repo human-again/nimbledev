@@ -4,13 +4,13 @@ agents/diff_parser.py
 Builds a structured summary of a pull request for downstream review.
 """
 
-import re
-import anthropic
 from rich.console import Console
 from rich.panel import Panel
 
-from config.settings import ANTHROPIC_API_KEY, MODEL
-from tools.github import PR_REVIEW_TOOLS, dispatch
+from config.settings import MODEL
+from agents.llm import create_llm_client
+from tools.github import DIFF_PARSER_TOOLS, dispatch
+from agents.json_utils import extract_json_object
 from agents.schemas import DiffSummary
 
 console = Console()
@@ -23,8 +23,8 @@ WHAT YOU MUST DO:
 1. Fetch the PR metadata using get_pull_request
 2. Fetch the list of changed files using get_pr_files
 3. Fetch the full diff using get_pr_diff
-4. Read any files that appear complex or critical using get_file_content
-5. Identify which areas of the code deserve the closest scrutiny
+4. Identify which areas of the code deserve the closest scrutiny
+5. List any extra context files the Critic should read, but do not read them yourself
 
 WHAT YOU MUST PRODUCE:
 A single JSON block — no prose before or after:
@@ -48,22 +48,17 @@ A single JSON block — no prose before or after:
 RULES:
 - areas_of_concern should be specific and actionable — not generic like "check for bugs"
 - context_files are files NOT in the diff but helpful for reviewing it (e.g. callers, tests, interfaces)
+- get_pr_diff returns JSON with content, truncated, and total_chars. If truncated is true, mention that limitation in areas_of_concern.
 - Output ONLY the JSON block. No introduction, no explanation after."""
 
 
 def _extract_json(text: str) -> str:
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
-    if fence:
-        return fence.group(1)
-    brace = re.search(r"\{.*\}", text, re.DOTALL)
-    if brace:
-        return brace.group(0)
-    raise ValueError("No JSON object found in agent response")
+    return extract_json_object(text)
 
 
 def run(owner: str, repo: str, pr_number: int) -> DiffSummary:
     """Run the Diff Parser agent and return a structured handoff."""
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    client = create_llm_client()
 
     messages = [
         {
@@ -85,18 +80,22 @@ def run(owner: str, repo: str, pr_number: int) -> DiffSummary:
 
     iteration = 0
     max_iterations = 10
+    parse_failures = 0
+    max_parse_retries = 1
+    correcting_output = False
 
     while iteration < max_iterations:
         iteration += 1
         console.print(f"\n[dim]── Turn {iteration} ──[/dim]")
 
-        response = client.messages.create(
+        response = client.create_message(
             model=MODEL,
             max_tokens=4096,
             system=SYSTEM_PROMPT,
-            tools=PR_REVIEW_TOOLS,
+            tools=[] if correcting_output else DIFF_PARSER_TOOLS,
             messages=messages,
         )
+        _print_usage(response)
 
         messages.append({"role": "assistant", "content": response.content})
 
@@ -118,6 +117,18 @@ def run(owner: str, repo: str, pr_number: int) -> DiffSummary:
                 return summary
             except Exception as e:
                 console.print(f"[red]Parse failed: {e}[/red]")
+                if parse_failures < max_parse_retries:
+                    parse_failures += 1
+                    correcting_output = True
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            "Your previous response did not validate as a DiffSummary. "
+                            f"Validation error: {e}\n\n"
+                            "Return only a corrected JSON object matching the requested schema."
+                        ),
+                    })
+                    continue
                 raise RuntimeError(f"Diff Parser produced invalid output: {e}") from e
 
         elif response.stop_reason == "tool_use":
@@ -151,3 +162,13 @@ def _fmt_args(args: dict) -> str:
             v_str = v_str[:40] + "..."
         parts.append(f"{k}={repr(v_str)}")
     return ", ".join(parts)
+
+
+def _print_usage(response) -> None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    input_tokens = getattr(usage, "input_tokens", None)
+    output_tokens = getattr(usage, "output_tokens", None)
+    if input_tokens is not None and output_tokens is not None:
+        console.print(f"[dim]Tokens: in={input_tokens}, out={output_tokens}[/dim]")

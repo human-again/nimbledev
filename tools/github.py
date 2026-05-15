@@ -3,6 +3,7 @@ GitHub API helpers and tool schemas for the PR review pipeline.
 """
 
 import base64
+import json
 
 import requests
 
@@ -62,9 +63,14 @@ def get_pr_diff(owner: str, repo: str, pr_number: int) -> str:
 
     diff = response.text
     max_chars = 12000
-    if len(diff) > max_chars:
-        diff = diff[:max_chars] + f"\n\n... (diff truncated - {len(diff)} chars total)"
-    return diff
+    return json.dumps(
+        {
+            "content": diff[:max_chars],
+            "truncated": len(diff) > max_chars,
+            "total_chars": len(diff),
+        },
+        indent=2,
+    )
 
 
 def get_file_content(owner: str, repo: str, file_path: str) -> str:
@@ -83,10 +89,15 @@ def get_file_content(owner: str, repo: str, file_path: str) -> str:
 
     content = base64.b64decode(data["content"]).decode("utf-8", errors="replace")
     max_chars = 8000
-    if len(content) > max_chars:
-        content = content[:max_chars] + f"\n\n... (truncated - file is {len(content)} chars total)"
-
-    return f"FILE: {file_path}\n{'-' * 40}\n{content}"
+    return json.dumps(
+        {
+            "file_path": file_path,
+            "content": content[:max_chars],
+            "truncated": len(content) > max_chars,
+            "total_chars": len(content),
+        },
+        indent=2,
+    )
 
 
 PR_REVIEW_TOOLS = [
@@ -142,6 +153,16 @@ PR_REVIEW_TOOLS = [
             "required": ["owner", "repo", "file_path"],
         },
     },
+]
+
+DIFF_PARSER_TOOLS = [
+    tool for tool in PR_REVIEW_TOOLS
+    if tool["name"] in {"get_pull_request", "get_pr_files", "get_pr_diff"}
+]
+
+CRITIC_TOOLS = [
+    tool for tool in PR_REVIEW_TOOLS
+    if tool["name"] in {"get_pr_diff", "get_file_content"}
 ]
 
 

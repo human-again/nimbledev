@@ -8,7 +8,7 @@ This branch ships only the PR review pipeline.
 
 from __future__ import annotations
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 # ── Pipeline: PR Review ────────────────────────────────────────────────────────
 
 class ReviewComment(BaseModel):
@@ -84,6 +84,17 @@ class PRReview(BaseModel):
     missing_tests: list[str] = Field(
         description="Scenarios or edge cases that should have test coverage"
     )
+
+    @model_validator(mode="after")
+    def require_changes_for_blocking_comments(self) -> "PRReview":
+        has_blocking_comment = any(
+            c.severity in {"critical", "major"} for c in self.comments
+        )
+        if has_blocking_comment and self.overall_verdict != "request_changes":
+            raise ValueError(
+                "overall_verdict must be 'request_changes' when critical or major comments exist"
+            )
+        return self
 
     def critical_count(self) -> int:
         return sum(1 for c in self.comments if c.severity == "critical")

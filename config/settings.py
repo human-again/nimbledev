@@ -22,10 +22,16 @@ def require(key: str) -> str:
     return value
 
 
-ANTHROPIC_API_KEY = require("ANTHROPIC_API_KEY")
 GITHUB_TOKEN = require("GITHUB_TOKEN")
 
-MODEL = os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-4-6"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
+ANTHROPIC_API_KEY = (
+    require("ANTHROPIC_API_KEY")
+    if LLM_PROVIDER == "anthropic"
+    else os.getenv("ANTHROPIC_API_KEY", "")
+)
+
+MODEL = os.getenv("MODEL") or os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-4-6"
 
 GITHUB_API_BASE = "https://api.github.com"
 GITHUB_HEADERS = {
