@@ -74,6 +74,10 @@ This is intentionally CLI-only: no UI, authentication flow, database, or deploym
 
 With more time, I would add a fixture-based eval suite for review quality: canned PR diffs, mocked tool responses, and expected behavioral assertions such as catching seeded bugs, choosing the right verdict, avoiding unsupported findings, and noting truncation limits. I would score schema validity, issue detection, severity/verdict correctness, tool-use discipline, and false-positive rate rather than exact review wording. I would also add parallel context retrieval, richer trace logging with cost estimates, and repository-specific review memory so future reviews can reuse past project conventions.
 
+## How I Used AI Tools
+
+I used AI coding assistance to iterate on the agent boundaries, schemas, prompts, setup flow, and test strategy. The most useful prompts were architectural: deciding where diff comprehension should end, what the critic should own, and which fields were necessary in each schema. I then used the assistant to stress-test scope and keep the final branch focused on one shippable SDLC use case.
+
 ## Contributing
 
 Contributions are welcome, including bug fixes, test improvements, eval additions, and provider-adapter follow-ups.
@@ -90,6 +94,3 @@ PRs are actively welcome. If you want to contribute but are unsure where to star
 2. The proposed approach.
 3. Any tradeoffs or open questions.
 
-## How I Used AI Tools
-
-I used AI coding assistance to iterate on the agent boundaries, schemas, prompts, setup flow, and test strategy. The most useful prompts were architectural: deciding where diff comprehension should end, what the critic should own, and which fields were necessary in each schema. I then used the assistant to stress-test scope and keep the final branch focused on one shippable SDLC use case.
